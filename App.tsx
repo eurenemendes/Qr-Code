@@ -16,11 +16,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const saved = localStorage.getItem('qr_history');
     if (saved) {
-      try {
-        setHistory(JSON.parse(saved));
-      } catch (e) {
-        console.error("Erro ao carregar histórico");
-      }
+      try { setHistory(JSON.parse(saved)); } catch (e) { console.error(e); }
     }
   }, []);
 
@@ -36,7 +32,7 @@ const App: React.FC = () => {
   };
 
   const handleScan = useCallback((content: string) => {
-    if (isCooldown) return;
+    if (isCooldown || !content) return;
     
     setIsCooldown(true);
     const result: ScanResult = {
@@ -47,7 +43,6 @@ const App: React.FC = () => {
     };
 
     setHistory(prev => {
-      // Evitar duplicatas consecutivas
       if (prev.length > 0 && prev[0].content === content) return prev;
       return [result, ...prev];
     });
@@ -56,7 +51,7 @@ const App: React.FC = () => {
     setAiAnalysis(null);
     
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-    setTimeout(() => setIsCooldown(false), 3000);
+    setTimeout(() => setIsCooldown(false), 2000);
   }, [isCooldown]);
 
   const handleAnalyze = async () => {
@@ -67,63 +62,48 @@ const App: React.FC = () => {
     setIsAnalyzing(false);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    // Poderia usar um toast aqui
-  };
-
-  const openLink = (url: string) => {
-    const validUrl = url.startsWith('http') ? url : `https://${url}`;
-    window.open(validUrl, '_blank', 'noopener,noreferrer');
-  };
-
   return (
-    <div className="flex flex-col h-screen max-w-2xl mx-auto bg-slate-950 overflow-hidden relative">
-      {/* Header */}
-      <header className="p-4 pt-6 flex items-center justify-between z-10">
-        <div>
-          <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-            <span className="bg-emerald-500 text-slate-950 px-2 py-0.5 rounded">QR</span>
-            MASTER PRO
+    <div className="flex flex-col h-screen max-w-md mx-auto bg-slate-950 overflow-hidden relative shadow-[0_0_100px_rgba(16,185,129,0.05)]">
+      {/* Dynamic Header */}
+      <header className="p-6 pb-2 flex items-center justify-between z-10">
+        <div className="flex flex-col">
+          <h1 className="text-xl font-black tracking-tight text-white leading-none">
+            <span className="text-emerald-500">QR</span> MASTER
           </h1>
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">Scanner Inteligente</span>
         </div>
-        <div className="flex gap-3">
-           <div className="flex flex-col items-end">
-             <span className="text-[10px] text-slate-500 font-bold uppercase">Status</span>
-             <span className="text-xs text-emerald-400 flex items-center gap-1">
-               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-               Pronto
-             </span>
-           </div>
+        <div className="bg-slate-900/50 p-2 px-3 rounded-full border border-slate-800 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+            <span className="text-[10px] font-bold text-slate-400">ONLINE</span>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto custom-scrollbar">
+      <main className="flex-1 overflow-y-auto custom-scrollbar px-6">
         {activeTab === AppTab.SCANNER ? (
-          <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="relative">
+          <div className="py-4 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="relative pt-4">
                 <QRScanner onScan={handleScan} isActive={activeTab === AppTab.SCANNER && !selectedResult} />
-                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-slate-800 px-4 py-1.5 rounded-full border border-slate-700 shadow-xl text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
-                   Posicione o código no quadro
+                <div className="mt-8 text-center">
+                    <p className="text-slate-400 text-sm font-medium">Aponte para um código QR</p>
+                    <p className="text-slate-600 text-[10px] uppercase tracking-widest mt-2">O processamento é automático</p>
                 </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-3 pt-4">
-              <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex flex-col items-center justify-center gap-1">
-                <i className="fas fa-history text-emerald-500/50 mb-1"></i>
-                <span className="text-xl font-bold text-white">{history.length}</span>
-                <span className="text-[10px] text-slate-500 font-bold uppercase">Histórico</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50 backdrop-blur-sm">
+                <i className="fas fa-bolt text-emerald-500/40 mb-3 text-lg"></i>
+                <div className="text-2xl font-black text-white">{history.length}</div>
+                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Total Scans</div>
               </div>
-              <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex flex-col items-center justify-center gap-1">
-                <i className="fas fa-shield-alt text-cyan-500/50 mb-1"></i>
-                <span className="text-xl font-bold text-white">Ativa</span>
-                <span className="text-[10px] text-slate-500 font-bold uppercase">Proteção IA</span>
+              <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50 backdrop-blur-sm">
+                <i className="fas fa-microchip text-cyan-500/40 mb-3 text-lg"></i>
+                <div className="text-2xl font-black text-white">IA</div>
+                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Análise Ativa</div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="p-4 animate-in fade-in duration-300">
+          <div className="py-4 animate-in fade-in duration-500">
             <ScanHistory 
               history={history} 
               onClear={() => setHistory([])} 
@@ -133,83 +113,57 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Result Modal */}
+      {/* Modern Result Sheet */}
       {selectedResult && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-slate-900 w-full max-w-lg rounded-t-[2.5rem] sm:rounded-[2.5rem] border-t border-x border-slate-800 shadow-2xl animate-in slide-in-from-bottom-full duration-500">
-            <div className="p-8">
-              <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mb-8 sm:hidden"></div>
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-slate-900 w-full rounded-t-[3rem] border-t border-slate-800 shadow-2xl animate-in slide-in-from-bottom-full duration-500 ease-out max-w-md">
+            <div className="p-8 pt-6 pb-12">
+              <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mb-8"></div>
               
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h3 className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Conteúdo Detectado</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                    <span className="text-white font-bold text-sm uppercase">{selectedResult.type}</span>
-                  </div>
+              <div className="flex justify-between items-center mb-8">
+                <div className="bg-emerald-500/10 text-emerald-500 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
+                  {selectedResult.type} Detectado
                 </div>
-                <button 
-                  onClick={() => setSelectedResult(null)}
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                >
+                <button onClick={() => setSelectedResult(null)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400">
                   <i className="fas fa-times"></i>
                 </button>
               </div>
 
-              <div className="bg-slate-950 p-5 rounded-3xl border border-slate-800 mb-6 overflow-hidden">
-                <p className="text-slate-200 font-medium text-lg break-all selection:bg-emerald-500/30 line-clamp-4">
+              <div className="bg-slate-950 p-6 rounded-[2.5rem] border border-slate-800 mb-8 max-h-40 overflow-y-auto custom-scrollbar">
+                <p className="text-slate-100 font-medium text-lg leading-relaxed break-all">
                   {selectedResult.content}
                 </p>
               </div>
 
               {aiAnalysis ? (
-                <div className="mb-6 p-5 rounded-3xl bg-emerald-500/5 border border-emerald-500/20 animate-in zoom-in duration-300">
-                  <div className="flex items-center gap-2 mb-3 text-emerald-400 text-xs font-black uppercase tracking-widest">
-                    <i className="fas fa-robot animate-bounce"></i> Insight da IA
+                <div className="mb-8 p-6 rounded-[2.5rem] bg-emerald-500/5 border border-emerald-500/20 animate-in zoom-in duration-500">
+                  <div className="flex items-center gap-3 mb-3 text-emerald-400 text-[10px] font-black uppercase tracking-widest">
+                    <i className="fas fa-sparkles"></i> Inteligência Gemini
                   </div>
-                  <p className="text-slate-300 text-sm leading-relaxed italic">"{aiAnalysis}"</p>
+                  <p className="text-slate-300 text-sm leading-relaxed leading-relaxed font-medium">"{aiAnalysis}"</p>
                 </div>
               ) : (
                 <button 
                   onClick={handleAnalyze}
                   disabled={isAnalyzing}
-                  className="w-full mb-6 py-4 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 rounded-2xl font-bold text-white flex items-center justify-center gap-3 transition-all transform active:scale-95 shadow-lg shadow-emerald-900/20"
+                  className="w-full mb-8 py-5 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-[2rem] font-black text-sm text-white flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-emerald-900/20 uppercase tracking-widest"
                 >
-                  {isAnalyzing ? (
-                    <><i className="fas fa-spinner animate-spin"></i> Analisando Conteúdo...</>
-                  ) : (
-                    <><i className="fas fa-magic"></i> Consultar Gemini IA</>
-                  )}
+                  {isAnalyzing ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-wand-magic-sparkles"></i>}
+                  {isAnalyzing ? "Processando..." : "Analisar com IA"}
                 </button>
               )}
 
               <div className="grid grid-cols-2 gap-4">
-                <button 
-                  onClick={() => {
-                    copyToClipboard(selectedResult.content);
-                    alert("Copiado!");
-                  }}
-                  className="py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all"
-                >
-                  <i className="fas fa-copy opacity-50"></i> Copiar
+                <button onClick={() => { navigator.clipboard.writeText(selectedResult.content); alert("Copiado!"); }} className="py-5 bg-slate-800 rounded-[2rem] font-bold text-sm text-white flex items-center justify-center gap-3 active:scale-95 transition-all">
+                  <i className="fas fa-copy opacity-40"></i> Copiar
                 </button>
                 {selectedResult.type === 'url' ? (
-                  <button 
-                    onClick={() => openLink(selectedResult.content)}
-                    className="py-4 bg-white text-slate-900 hover:bg-slate-100 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all"
-                  >
-                    <i className="fas fa-external-link-alt"></i> Abrir
+                  <button onClick={() => window.open(selectedResult.content.startsWith('http') ? selectedResult.content : `https://${selectedResult.content}`, '_blank')} className="py-5 bg-white text-slate-950 rounded-[2rem] font-bold text-sm flex items-center justify-center gap-3 active:scale-95 transition-all">
+                    <i className="fas fa-external-link-alt"></i> Visitar
                   </button>
                 ) : (
-                  <button 
-                    onClick={() => {
-                       if (navigator.share) {
-                          navigator.share({ title: 'QR Code Result', text: selectedResult.content });
-                       }
-                    }}
-                    className="py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-all"
-                  >
-                    <i className="fas fa-share-alt opacity-50"></i> Partilhar
+                  <button onClick={() => navigator.share && navigator.share({text: selectedResult.content})} className="py-5 bg-slate-800 rounded-[2rem] font-bold text-sm text-white flex items-center justify-center gap-3 active:scale-95 transition-all">
+                    <i className="fas fa-share-nodes opacity-40"></i> Enviar
                   </button>
                 )}
               </div>
@@ -218,26 +172,23 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Nav Tab Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-2xl mx-auto h-24 bg-slate-900/90 backdrop-blur-2xl border-t border-slate-800 flex items-center justify-around px-12 z-40 pb-6">
+      {/* Floating Bottom Nav */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[280px] h-16 bg-slate-900/80 backdrop-blur-2xl rounded-full border border-slate-800 flex items-center justify-between px-2 z-40 shadow-2xl safe-bottom">
         <button 
           onClick={() => setActiveTab(AppTab.SCANNER)}
-          className={`group flex flex-col items-center gap-1.5 transition-all ${activeTab === AppTab.SCANNER ? 'text-emerald-400' : 'text-slate-500'}`}
+          className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.SCANNER ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
         >
-          <div className={`w-12 h-1 rounded-full mb-1 transition-all ${activeTab === AppTab.SCANNER ? 'bg-emerald-400' : 'bg-transparent'}`}></div>
-          <i className={`fas fa-expand text-xl transition-transform group-active:scale-90`}></i>
-          <span className="text-[9px] font-black uppercase tracking-widest">Scanner</span>
+          <i className="fas fa-qrcode"></i>
+          <span className="text-[10px] uppercase tracking-widest">Scanner</span>
         </button>
-        
         <button 
           onClick={() => setActiveTab(AppTab.HISTORY)}
-          className={`group flex flex-col items-center gap-1.5 transition-all ${activeTab === AppTab.HISTORY ? 'text-emerald-400' : 'text-slate-500'}`}
+          className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.HISTORY ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
         >
-          <div className={`w-12 h-1 rounded-full mb-1 transition-all ${activeTab === AppTab.HISTORY ? 'bg-emerald-400' : 'bg-transparent'}`}></div>
-          <i className={`fas fa-layer-group text-xl transition-transform group-active:scale-90`}></i>
-          <span className="text-[9px] font-black uppercase tracking-widest">Logs</span>
+          <i className="fas fa-history"></i>
+          <span className="text-[10px] uppercase tracking-widest">Logs</span>
         </button>
-      </nav>
+      </div>
     </div>
   );
 };

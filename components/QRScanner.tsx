@@ -1,7 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-// @ts-ignore
-import jsQR from 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/+esm';
+import jsQR from 'jsqr';
 
 interface QRScannerProps {
   onScan: (result: string) => void;
@@ -22,9 +21,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
       requestRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop();
-      });
+      streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -37,35 +34,40 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
     stopCamera();
     setError(null);
 
-    const attemptStream = async (constraints: MediaStreamConstraints) => {
+    try {
+      const constraints: MediaStreamConstraints = {
+        video: { 
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().then(() => setIsCameraReady(true));
+        };
+      }
+    } catch (err: any) {
+      console.error("Camera error:", err);
+      // Fallback para qualquer câmera
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.setAttribute('playsinline', 'true'); // Essencial para iOS
           await videoRef.current.play();
           setIsCameraReady(true);
-          return true;
         }
-      } catch (e) {
-        return false;
+      } catch (fallbackErr) {
+        setError("Câmera bloqueada ou não encontrada. Verifique as permissões de HTTPS.");
       }
-      return false;
-    };
-
-    // Tentativa 1: Câmera traseira (Ideal para QR Codes)
-    let success = await attemptStream({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-
-    // Tentativa 2: Fallback para qualquer câmera disponível (Desktop ou Frontal)
-    if (!success) {
-      success = await attemptStream({ video: true });
-    }
-
-    if (!success) {
-      setError("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
     }
   };
 
@@ -83,15 +85,13 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // jsQR é a biblioteca que faz a mágica acontecer
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'attemptBoth', // Melhora muito a leitura em fundos escuros
+          inversionAttempts: 'attemptBoth',
         });
 
-        if (code && code.data && code.data.trim() !== "") {
+        if (code && code.data) {
           onScan(code.data);
-          return; // Para o loop pois o App exibirá o modal de resultado
+          return;
         }
       }
     }
@@ -99,11 +99,8 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
   }, [isActive, isCameraReady, onScan]);
 
   useEffect(() => {
-    if (isActive) {
-      startCamera();
-    } else {
-      stopCamera();
-    }
+    if (isActive) startCamera();
+    else stopCamera();
     return () => stopCamera();
   }, [isActive]);
 
@@ -117,59 +114,34 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
   }, [isCameraReady, isActive, tick]);
 
   return (
-    <div className="relative w-full max-w-md mx-auto aspect-square overflow-hidden rounded-[2.5rem] border-4 border-emerald-500/20 bg-slate-950 shadow-2xl">
+    <div className="relative w-full max-w-md mx-auto aspect-square overflow-hidden rounded-[3rem] border-4 border-emerald-500/20 bg-slate-900 shadow-2xl">
       {error ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-900 z-20">
-          <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
-            <i className="fas fa-camera-slash text-2xl text-red-500"></i>
-          </div>
-          <p className="text-slate-300 font-medium mb-6 text-sm leading-relaxed">{error}</p>
-          <button 
-            onClick={startCamera}
-            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all active:scale-95"
-          >
-            Tentar Novamente
-          </button>
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-900 z-30">
+          <i className="fas fa-exclamation-triangle text-3xl text-amber-500 mb-4"></i>
+          <p className="text-slate-300 text-sm mb-6">{error}</p>
+          <button onClick={startCamera} className="px-6 py-2 bg-emerald-600 rounded-xl font-bold">Tentar Novamente</button>
         </div>
       ) : (
         <>
-          <video 
-            ref={videoRef} 
-            className="w-full h-full object-cover grayscale-[0.2] contrast-[1.2]"
-            muted
-            playsInline
-          />
+          <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
           <canvas ref={canvasRef} className="hidden" />
           
-          {/* Overlay Visual */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-             <div className="w-64 h-64 border-2 border-emerald-500/30 rounded-3xl relative">
-                {/* Linha de Scan com brilho */}
-                <div className="scan-line absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_20px_rgba(52,211,153,0.6)] z-10"></div>
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+             <div className="w-64 h-64 border-2 border-emerald-500/40 rounded-[2.5rem] relative overflow-hidden">
+                <div className="scan-line absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_20px_rgba(52,211,153,0.8)]"></div>
                 
-                {/* Cantos reforçados */}
-                <div className="absolute -top-1 -left-1 w-12 h-12 border-t-4 border-l-4 border-emerald-500 rounded-tl-2xl shadow-[-5px_-5px_15px_rgba(16,185,129,0.2)]"></div>
-                <div className="absolute -top-1 -right-1 w-12 h-12 border-t-4 border-r-4 border-emerald-500 rounded-tr-2xl shadow-[5px_-5px_15px_rgba(16,185,129,0.2)]"></div>
-                <div className="absolute -bottom-1 -left-1 w-12 h-12 border-b-4 border-l-4 border-emerald-500 rounded-bl-2xl shadow-[-5px_5px_15px_rgba(16,185,129,0.2)]"></div>
-                <div className="absolute -bottom-1 -right-1 w-12 h-12 border-b-4 border-r-4 border-emerald-500 rounded-br-2xl shadow-[5px_5px_15px_rgba(16,185,129,0.2)]"></div>
-                
-                {/* Indicadores de foco centrais */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 border border-emerald-500/20 rounded-full animate-ping"></div>
+                <div className="absolute -top-1 -left-1 w-12 h-12 border-t-4 border-l-4 border-emerald-500 rounded-tl-2xl"></div>
+                <div className="absolute -top-1 -right-1 w-12 h-12 border-t-4 border-r-4 border-emerald-500 rounded-tr-2xl"></div>
+                <div className="absolute -bottom-1 -left-1 w-12 h-12 border-b-4 border-l-4 border-emerald-500 rounded-bl-2xl"></div>
+                <div className="absolute -bottom-1 -right-1 w-12 h-12 border-b-4 border-r-4 border-emerald-500 rounded-br-2xl"></div>
              </div>
-
-             {/* Máscara de vinheta ao redor do scanner */}
-             <div className="absolute inset-0 bg-slate-950/60" style={{ maskImage: 'radial-gradient(circle 140px, transparent 100%, black 101%)', WebkitMaskImage: 'radial-gradient(circle 140px, transparent 100%, black 101%)' }}></div>
+             <div className="absolute inset-0 bg-slate-950/40" style={{ maskImage: 'radial-gradient(circle 140px, transparent 100%, black 101%)', WebkitMaskImage: 'radial-gradient(circle 140px, transparent 100%, black 101%)' }}></div>
           </div>
           
           {!isCameraReady && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-10">
-              <div className="relative">
-                <div className="w-20 h-20 rounded-full border-4 border-emerald-500/10 border-t-emerald-500 animate-spin"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <i className="fas fa-camera text-xl text-emerald-500/40"></i>
-                </div>
-              </div>
-              <p className="mt-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] animate-pulse">Calibrando Sensor</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-20">
+              <div className="w-12 h-12 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin"></div>
+              <p className="mt-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Iniciando Sensor</p>
             </div>
           )}
         </>
