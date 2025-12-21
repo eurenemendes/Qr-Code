@@ -1,0 +1,7 @@
+{
+  "name": "QR Master Pro",
+  "description": "Um leitor de QR Code moderno e ultrarrápido com histórico, análise por IA e design responsivo.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
