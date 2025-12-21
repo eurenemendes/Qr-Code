@@ -6,15 +6,15 @@ export const analyzeQRContent = async (content: string): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Analise o seguinte conteúdo extraído de um QR Code e explique de forma curta e útil o que ele é. Se for um link, descreva o possível destino. Se for texto, resuma. Conteúdo: "${content}"`,
+      contents: `Analise o seguinte conteúdo de um QR Code e me diga o que é de forma muito concisa (máximo 2 frases). Se for um link, verifique se parece malicioso ou oficial. Conteúdo: "${content}"`,
       config: {
-        systemInstruction: "Você é um assistente de segurança digital e produtividade que ajuda usuários a entenderem o conteúdo de QR Codes antes de clicarem ou usarem os dados.",
-        temperature: 0.7,
+        systemInstruction: "Você é um especialista em segurança digital. Sua missão é analisar dados de QR Codes e explicar em Português do Brasil o que eles representam, alertando sobre possíveis riscos de phishing em links desconhecidos ou explicando o formato dos dados (ex: VCard, JSON, texto puro).",
+        temperature: 0.4,
       },
     });
-    return response.text || "Não foi possível analisar o conteúdo.";
+    return response.text || "Análise concluída, mas sem observações adicionais.";
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
-    return "Erro ao conectar com o serviço de IA.";
+    return "Não foi possível completar a análise de IA no momento. Por favor, verifique manualmente.";
   }
 };
