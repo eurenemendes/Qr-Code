@@ -17,10 +17,11 @@ const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCooldown, setIsCooldown] = useState(false);
   
-  // Estados para permissão, lanterna e upload
+  // Estados para permissão, lanterna, upload e energia da câmera
   const [permission, setPermission] = useState<PermissionStatus>('checking');
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
+  const [isCameraEnabled, setIsCameraEnabled] = useState(false); // Inicia desligada
   const [multiScanResults, setMultiScanResults] = useState<string[] | null>(null);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +46,7 @@ const App: React.FC = () => {
         setPermission(result.state);
         result.onchange = () => setPermission(result.state);
       } else {
+        // Apenas verifica se existe permissão sem manter o stream aberto
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         stream.getTracks().forEach(track => track.stop());
         setPermission('granted');
@@ -160,6 +162,23 @@ const App: React.FC = () => {
     setIsAnalyzing(false);
   };
 
+  const renderCameraPlaceholder = () => (
+    <div className="w-full aspect-square rounded-[3rem] bg-slate-900 border-4 border-slate-800 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+      <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-6 relative">
+        <i className="fas fa-video-slash text-2xl text-slate-500"></i>
+        <div className="absolute inset-0 rounded-full border border-slate-700 animate-ping opacity-20"></div>
+      </div>
+      <h3 className="text-white font-bold mb-2">Câmera Desligada</h3>
+      <p className="text-slate-500 text-xs mb-8 max-w-[200px]">Ative a câmera para escanear códigos em tempo real ou use a galeria.</p>
+      <button 
+        onClick={() => setIsCameraEnabled(true)}
+        className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-900/20"
+      >
+        Ligar Câmera
+      </button>
+    </div>
+  );
+
   const renderPermissionDenied = () => (
     <div className="flex flex-col items-center justify-center h-full text-center px-8 animate-in fade-in duration-500">
       <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
@@ -167,7 +186,7 @@ const App: React.FC = () => {
       </div>
       <h2 className="text-xl font-bold text-white mb-4">Câmera Indisponível</h2>
       <p className="text-slate-400 text-sm leading-relaxed mb-8">
-        Use a opção de carregar imagem abaixo para analisar códigos da sua galeria.
+        O acesso à câmera foi negado. Você ainda pode usar a galeria para analisar imagens.
       </p>
       <div className="space-y-3 w-full">
         <button 
@@ -206,9 +225,9 @@ const App: React.FC = () => {
           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">Scanner Inteligente</span>
         </div>
         <div className="bg-slate-900/50 p-2 px-3 rounded-full border border-slate-800 flex items-center gap-2">
-            <span className={`w-1.5 h-1.5 rounded-full ${permission === 'granted' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+            <span className={`w-1.5 h-1.5 rounded-full ${isCameraEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></span>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              {permission === 'granted' ? 'Ao Vivo' : 'Estático'}
+              {isCameraEnabled ? 'Sensor On' : 'Sensor Off'}
             </span>
         </div>
       </header>
@@ -219,11 +238,13 @@ const App: React.FC = () => {
             <div className="relative pt-4">
                 {permission === 'denied' ? (
                   renderPermissionDenied()
+                ) : !isCameraEnabled ? (
+                  renderCameraPlaceholder()
                 ) : (
                   <>
                     <QRScanner 
                       onScan={handleScan} 
-                      isActive={activeTab === AppTab.SCANNER && !selectedResult && !multiScanResults && !imageToCrop}
+                      isActive={activeTab === AppTab.SCANNER && !selectedResult && !multiScanResults && !imageToCrop && isCameraEnabled}
                       isTorchOn={isTorchOn}
                       onTorchSupportChange={setIsTorchSupported}
                       onError={(err) => err.name === 'NotAllowedError' && setPermission('denied')}
@@ -233,16 +254,25 @@ const App: React.FC = () => {
                       {isTorchSupported && !selectedResult && !multiScanResults && !imageToCrop && (
                         <button 
                           onClick={() => setIsTorchOn(!isTorchOn)}
+                          title="Alternar Lanterna"
                           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isTorchOn ? 'bg-emerald-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-slate-800/80 text-slate-400 backdrop-blur-md'}`}
                         >
                           <i className={`fas fa-bolt ${isTorchOn ? 'animate-pulse' : ''}`}></i>
                         </button>
                       )}
                       <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-12 h-12 rounded-full bg-slate-800/80 text-slate-400 backdrop-blur-md flex items-center justify-center transition-all active:scale-90"
+                        onClick={() => setIsCameraEnabled(false)}
+                        title="Desligar Câmera"
+                        className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 backdrop-blur-md flex items-center justify-center border border-red-500/20 active:scale-90 transition-all"
                       >
-                        <i className="fas fa-crop-simple"></i>
+                        <i className="fas fa-power-off"></i>
+                      </button>
+                      <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Abrir Galeria"
+                        className="w-12 h-12 rounded-full bg-slate-800/80 text-slate-400 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all"
+                      >
+                        <i className="fas fa-image"></i>
                       </button>
                     </div>
                   </>
@@ -250,9 +280,9 @@ const App: React.FC = () => {
 
                 <div className="mt-8 text-center">
                     <p className="text-slate-400 text-sm font-medium">
-                      {permission === 'denied' ? 'Selecione uma imagem' : 'Aponte ou Recorte'}
+                      {!isCameraEnabled ? 'Câmera em Standby' : 'Scanner Ativo'}
                     </p>
-                    <p className="text-slate-600 text-[10px] uppercase tracking-widest mt-2">Tecnologia Multi-Scan integrada</p>
+                    <p className="text-slate-600 text-[10px] uppercase tracking-widest mt-2">Tecnologia de Baixo Consumo</p>
                 </div>
             </div>
             
