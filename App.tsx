@@ -16,14 +16,10 @@ interface CustomAlert {
 }
 
 const ANALYSIS_STEPS = [
-  "Iniciando motores de IA...",
-  "Extraindo metadados...",
-  "Decodificando padrões complexos...",
-  "Consultando base Gemini...",
-  "Verificando integridade de links...",
-  "Avaliando riscos de segurança...",
-  "Sintetizando explicação...",
-  "Finalizando relatório..."
+  "Lendo dados...",
+  "Processando...",
+  "Consultando IA...",
+  "Finalizando..."
 ];
 
 const App: React.FC = () => {
@@ -44,6 +40,9 @@ const App: React.FC = () => {
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [customAlert, setCustomAlert] = useState<CustomAlert | null>(null);
+  const [isDecodingFile, setIsDecodingFile] = useState(false);
+  const [decodingProgress, setDecodingProgress] = useState(0);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -116,57 +115,42 @@ const App: React.FC = () => {
   }, [isCooldown]);
 
   const processImageForQR = (imageSrc: string) => {
+    setIsDecodingFile(true);
+    setDecodingProgress(0);
+    
+    // Simular progresso de leitura de arquivo
+    const progressInt = setInterval(() => {
+      setDecodingProgress(prev => Math.min(prev + 15, 90));
+    }, 100);
+
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d', { willReadFrequently: true });
-      if (!context) return;
+      if (!context) {
+        clearInterval(progressInt);
+        setIsDecodingFile(false);
+        return;
+      }
 
       canvas.width = img.width;
       canvas.height = img.height;
       context.drawImage(img, 0, 0);
       
-      const results: string[] = [];
-      let searching = true;
-      let attempts = 0;
-      const MAX_ATTEMPTS = 15;
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-      const tempCanvas = document.createElement('canvas');
-      const tempContext = tempCanvas.getContext('2d');
-      if (!tempContext) return;
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      tempContext.drawImage(img, 0, 0);
+      clearInterval(progressInt);
+      setDecodingProgress(100);
 
-      while (searching && attempts < MAX_ATTEMPTS) {
-        const imageData = tempContext.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-
+      setTimeout(() => {
+        setIsDecodingFile(false);
         if (code) {
-          results.push(code.data);
-          const { topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner } = code.location;
-          tempContext.fillStyle = 'black';
-          tempContext.beginPath();
-          tempContext.moveTo(topLeftCorner.x, topLeftCorner.y);
-          tempContext.lineTo(topRightCorner.x, topRightCorner.y);
-          tempContext.lineTo(bottomRightCorner.x, bottomRightCorner.y);
-          tempContext.lineTo(bottomLeftCorner.x, bottomLeftCorner.y);
-          tempContext.closePath();
-          tempContext.fill();
-          attempts++;
+          handleScan(code.data);
         } else {
-          searching = false;
+          showAlert("Busca Concluída", "Nenhum QR Code foi detectado. Tente recortar a área para melhor precisão.", "warning");
         }
-      }
-
-      if (results.length === 1) {
-        handleScan(results[0]);
-      } else if (results.length > 1) {
-        const uniqueResults = Array.from(new Set(results));
-        setMultiScanResults(uniqueResults);
-      } else {
-        showAlert("Busca Concluída", "Nenhum QR Code foi detectado nesta imagem. Tente usar o ajuste de recorte.", "warning");
-      }
+      }, 300);
     };
     img.src = imageSrc;
     setImageToCrop(null);
@@ -191,38 +175,39 @@ const App: React.FC = () => {
     setAnalysisProgress(0);
     setAnalysisStatus(ANALYSIS_STEPS[0]);
 
-    // Simulação de progresso inteligente
     let currentProgress = 0;
     const progressInterval = setInterval(() => {
-      currentProgress += Math.random() * (currentProgress > 80 ? 0.5 : 5);
-      if (currentProgress > 95) currentProgress = 95;
-      
+      currentProgress += Math.random() * (currentProgress > 80 ? 0.5 : 8);
+      if (currentProgress > 92) currentProgress = 92;
       setAnalysisProgress(Math.floor(currentProgress));
       
-      // Mudar mensagens de status baseado no progresso
-      const stepIndex = Math.min(
-        Math.floor((currentProgress / 100) * ANALYSIS_STEPS.length),
-        ANALYSIS_STEPS.length - 1
-      );
+      const stepIndex = Math.min(Math.floor((currentProgress / 100) * ANALYSIS_STEPS.length), ANALYSIS_STEPS.length - 1);
       setAnalysisStatus(ANALYSIS_STEPS[stepIndex]);
-    }, 150);
+    }, 100);
 
     try {
       const analysis = await analyzeQRContent(selectedResult.content);
       clearInterval(progressInterval);
       setAnalysisProgress(100);
-      setAnalysisStatus("Análise Concluída!");
-      
-      setTimeout(() => {
-        setAiAnalysis(analysis);
-        setIsAnalyzing(false);
-      }, 500);
+      setAiAnalysis(analysis);
+      setIsAnalyzing(false);
     } catch (error) {
       clearInterval(progressInterval);
       setIsAnalyzing(false);
-      showAlert("Erro na IA", "Não foi possível conectar ao cérebro digital.", "error");
+      showAlert("Erro na IA", "Não foi possível completar a análise.", "error");
     }
   };
+
+  // UI para quando a permissão da câmera é negada
+  const renderPermissionDenied = () => (
+    <div className="w-full aspect-square rounded-[3rem] bg-slate-900 border-4 border-slate-800 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+      <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 relative">
+        <i className="fas fa-lock text-2xl text-red-500"></i>
+      </div>
+      <h3 className="text-white font-bold mb-2">Acesso Negado</h3>
+      <p className="text-slate-500 text-xs mb-8 max-w-[200px]">O acesso à câmera foi negado. Por favor, habilite as permissões nas configurações do seu navegador.</p>
+    </div>
+  );
 
   const renderCameraPlaceholder = () => (
     <div className="w-full aspect-square rounded-[3rem] bg-slate-900 border-4 border-slate-800 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
@@ -231,128 +216,39 @@ const App: React.FC = () => {
         <div className="absolute inset-0 rounded-full border border-slate-700 animate-ping opacity-20"></div>
       </div>
       <h3 className="text-white font-bold mb-2">Câmera Desligada</h3>
-      <p className="text-slate-500 text-xs mb-8 max-w-[200px]">Ative a câmera para escanear códigos em tempo real ou use a galeria.</p>
+      <p className="text-slate-500 text-xs mb-8 max-w-[200px]">Ative a câmera ou use a galeria para escanear.</p>
       <button 
         onClick={() => setIsCameraEnabled(true)}
-        className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-emerald-900/20"
+        className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg"
       >
         Ligar Câmera
       </button>
     </div>
   );
 
-  const renderPermissionDenied = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center px-8 animate-in fade-in duration-500">
-      <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
-        <i className="fas fa-camera-slash text-3xl text-red-500"></i>
-      </div>
-      <h2 className="text-xl font-bold text-white mb-4">Câmera Indisponível</h2>
-      <p className="text-slate-400 text-sm leading-relaxed mb-8">
-        O acesso à câmera foi negado. Você ainda pode usar a galeria para analisar imagens.
-      </p>
-      <div className="space-y-3 w-full">
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold active:scale-95 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20"
-        >
-          <i className="fas fa-image"></i> Abrir Galeria
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div className="flex flex-col h-screen max-w-md mx-auto bg-slate-950 overflow-hidden relative shadow-[0_0_100px_rgba(16,185,129,0.05)]">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileUpload} 
-        accept="image/*" 
-        className="hidden" 
-      />
+      <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
 
       {imageToCrop && (
-        <ImageCropper 
-          imageSrc={imageToCrop} 
-          onConfirm={processImageForQR} 
-          onCancel={() => setImageToCrop(null)} 
-        />
+        <ImageCropper imageSrc={imageToCrop} onConfirm={processImageForQR} onCancel={() => setImageToCrop(null)} />
       )}
 
-      {/* Overlay de Análise IA com Progresso */}
-      {isAnalyzing && (
-        <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-2xl animate-in fade-in duration-300">
-          <div className="relative w-48 h-48 flex items-center justify-center mb-10">
-            {/* Anéis de Progresso */}
-            <svg className="w-full h-full -rotate-90">
-              <circle
-                cx="96" cy="96" r="80"
-                className="stroke-slate-800 fill-none"
-                strokeWidth="8"
-              />
-              <circle
-                cx="96" cy="96" r="80"
-                className="stroke-emerald-500 fill-none transition-all duration-300 ease-out"
-                strokeWidth="8"
-                strokeDasharray={2 * Math.PI * 80}
-                strokeDashoffset={2 * Math.PI * 80 * (1 - analysisProgress / 100)}
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-4xl font-black text-white">{analysisProgress}%</span>
-              <span className="text-[10px] font-black text-emerald-500/60 uppercase tracking-widest mt-1">Status IA</span>
-            </div>
-            {/* Efeito de Scanner Animado no Círculo */}
-            <div className="absolute inset-0 rounded-full border border-emerald-500/20 animate-ping"></div>
-          </div>
-
-          <div className="text-center px-12 max-w-xs">
-            <h3 className="text-white font-black text-xl mb-3 animate-pulse">Analisando Dados</h3>
-            <p className="text-slate-400 text-sm font-medium min-h-[40px] italic">
-              "{analysisStatus}"
-            </p>
-          </div>
-
-          <div className="mt-12 flex gap-1">
-            {[...Array(3)].map((_, i) => (
-              <div 
-                key={i} 
-                className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce"
-                style={{ animationDelay: `${i * 0.2}s` }}
-              ></div>
-            ))}
-          </div>
-        </div>
+      {/* Carregamento de Decodificação de Arquivo */}
+      {isDecodingFile && (
+        <div className="fixed top-0 left-0 right-0 z-[250] bg-emerald-500 h-1 transition-all duration-300" style={{ width: `${decodingProgress}%` }}></div>
       )}
 
       {/* Alerta Personalizado */}
       {customAlert && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-w-[320px] bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
-            <div className="p-8 flex flex-col items-center text-center">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-inner ${
-                customAlert.type === 'success' ? 'bg-emerald-500/10 text-emerald-500' :
-                customAlert.type === 'error' ? 'bg-red-500/10 text-red-500' :
-                customAlert.type === 'warning' ? 'bg-amber-500/10 text-amber-500' :
-                'bg-blue-500/10 text-blue-500'
-              }`}>
-                <i className={`fas fa-lg ${
-                  customAlert.type === 'success' ? 'fa-check-circle' :
-                  customAlert.type === 'error' ? 'fa-circle-exclamation' :
-                  customAlert.type === 'warning' ? 'fa-triangle-exclamation' :
-                  'fa-info-circle'
-                }`}></i>
-              </div>
-              <h3 className="text-white font-black text-lg mb-2">{customAlert.title}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{customAlert.message}</p>
-              <button 
-                onClick={() => setCustomAlert(null)}
-                className="mt-8 w-full py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold text-sm transition-all active:scale-95 border border-slate-700"
-              >
-                Entendido
-              </button>
+          <div className="w-full max-w-[320px] bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl p-8 flex flex-col items-center text-center">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${customAlert.type === 'success' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+              <i className={`fas fa-lg ${customAlert.type === 'success' ? 'fa-check-circle' : 'fa-triangle-exclamation'}`}></i>
             </div>
+            <h3 className="text-white font-black text-lg mb-2">{customAlert.title}</h3>
+            <p className="text-slate-400 text-sm leading-relaxed">{customAlert.message}</p>
+            <button onClick={() => setCustomAlert(null)} className="mt-8 w-full py-4 bg-slate-800 text-white rounded-2xl font-bold border border-slate-700">Fechar</button>
           </div>
         </div>
       )}
@@ -360,40 +256,20 @@ const App: React.FC = () => {
       {/* Modal de Escolha após Upload */}
       {pendingImage && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="w-full max-w-sm bg-slate-900 rounded-[2.5rem] border border-slate-800 p-8 shadow-2xl animate-in zoom-in-95 duration-500">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6">
-                <i className="fas fa-file-image text-2xl text-emerald-500"></i>
-              </div>
-              <h2 className="text-xl font-black text-white mb-2">Imagem Carregada</h2>
-              <p className="text-sm text-slate-400 mb-8 leading-relaxed">Como você deseja processar esta imagem para encontrar o QR Code?</p>
-              
-              <div className="space-y-3 w-full">
-                <button 
-                  onClick={() => {
-                    processImageForQR(pendingImage);
-                    setPendingImage(null);
-                  }}
-                  className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold active:scale-95 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20"
-                >
-                  <i className="fas fa-expand"></i> Imagem Inteira
-                </button>
-                <button 
-                  onClick={() => {
-                    setImageToCrop(pendingImage);
-                    setPendingImage(null);
-                  }}
-                  className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold active:scale-95 transition-all flex items-center justify-center gap-3"
-                >
-                  <i className="fas fa-crop-simple"></i> Recortar Área
-                </button>
-                <button 
-                  onClick={() => setPendingImage(null)}
-                  className="w-full py-3 text-slate-500 font-bold text-sm mt-2 active:scale-95 transition-all"
-                >
-                  Cancelar
-                </button>
-              </div>
+          <div className="w-full max-w-sm bg-slate-900 rounded-[2.5rem] border border-slate-800 p-8 text-center animate-in zoom-in-95 duration-500">
+            <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 mx-auto">
+              <i className="fas fa-file-image text-2xl text-emerald-500"></i>
+            </div>
+            <h2 className="text-xl font-black text-white mb-2">Imagem Carregada</h2>
+            <p className="text-sm text-slate-400 mb-8">Escolha como processar para encontrar o QR Code:</p>
+            <div className="space-y-3">
+              <button onClick={() => { processImageForQR(pendingImage); setPendingImage(null); }} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3">
+                <i className="fas fa-expand"></i> Imagem Inteira
+              </button>
+              <button onClick={() => { setImageToCrop(pendingImage); setPendingImage(null); }} className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold flex items-center justify-center gap-3">
+                <i className="fas fa-crop-simple"></i> Recortar Área
+              </button>
+              <button onClick={() => setPendingImage(null)} className="w-full py-3 text-slate-500 font-bold text-sm">Cancelar</button>
             </div>
           </div>
         </div>
@@ -401,227 +277,102 @@ const App: React.FC = () => {
 
       <header className="p-6 pb-2 flex items-center justify-between z-10">
         <div className="flex flex-col">
-          <h1 className="text-xl font-black tracking-tight text-white leading-none">
-            <span className="text-emerald-500">QR</span> MASTER
-          </h1>
+          <h1 className="text-xl font-black tracking-tight text-white leading-none"><span className="text-emerald-500">QR</span> MASTER</h1>
           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-1">Scanner Inteligente</span>
         </div>
         <div className="bg-slate-900/50 p-2 px-3 rounded-full border border-slate-800 flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full ${isCameraEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              {isCameraEnabled ? 'Sensor On' : 'Sensor Off'}
-            </span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{isCameraEnabled ? 'Sensor On' : 'Sensor Off'}</span>
         </div>
       </header>
 
       <main className="flex-1 overflow-y-auto custom-scrollbar px-6">
         {activeTab === AppTab.SCANNER ? (
-          <div className="py-4 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="py-4 space-y-8">
             <div className="relative pt-4">
-                {permission === 'denied' ? (
-                  renderPermissionDenied()
-                ) : !isCameraEnabled ? (
-                  renderCameraPlaceholder()
-                ) : (
+                {permission === 'denied' ? renderPermissionDenied() : !isCameraEnabled ? renderCameraPlaceholder() : (
                   <>
-                    <QRScanner 
-                      onScan={handleScan} 
-                      isActive={activeTab === AppTab.SCANNER && !selectedResult && !multiScanResults && !imageToCrop && isCameraEnabled}
-                      isTorchOn={isTorchOn}
-                      onTorchSupportChange={setIsTorchSupported}
-                      onError={(err) => err.name === 'NotAllowedError' && setPermission('denied')}
-                    />
-                    
+                    <QRScanner onScan={handleScan} isActive={activeTab === AppTab.SCANNER && !selectedResult && !multiScanResults && !imageToCrop && isCameraEnabled} isTorchOn={isTorchOn} onTorchSupportChange={setIsTorchSupported} />
                     <div className="absolute top-8 right-4 flex flex-col gap-3 z-20">
-                      {isTorchSupported && !selectedResult && !multiScanResults && !imageToCrop && (
-                        <button 
-                          onClick={() => setIsTorchOn(!isTorchOn)}
-                          title="Alternar Lanterna"
-                          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isTorchOn ? 'bg-emerald-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-slate-800/80 text-slate-400 backdrop-blur-md'}`}
-                        >
-                          <i className={`fas fa-bolt ${isTorchOn ? 'animate-pulse' : ''}`}></i>
-                        </button>
+                      {isTorchSupported && (
+                        <button onClick={() => setIsTorchOn(!isTorchOn)} className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isTorchOn ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800/80 text-slate-400'}`}><i className="fas fa-bolt"></i></button>
                       )}
-                      <button 
-                        onClick={() => setIsCameraEnabled(false)}
-                        title="Desligar Câmera"
-                        className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 backdrop-blur-md flex items-center justify-center border border-red-500/20 active:scale-90 transition-all"
-                      >
-                        <i className="fas fa-power-off"></i>
-                      </button>
-                      <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        title="Abrir Galeria"
-                        className="w-12 h-12 rounded-full bg-slate-800/80 text-slate-400 backdrop-blur-md flex items-center justify-center active:scale-90 transition-all"
-                      >
-                        <i className="fas fa-image"></i>
-                      </button>
+                      <button onClick={() => setIsCameraEnabled(false)} className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 backdrop-blur-md flex items-center justify-center border border-red-500/20"><i className="fas fa-power-off"></i></button>
+                      <button onClick={() => fileInputRef.current?.click()} className="w-12 h-12 rounded-full bg-slate-800/80 text-slate-400 backdrop-blur-md flex items-center justify-center"><i className="fas fa-image"></i></button>
                     </div>
                   </>
                 )}
-
-                <div className="mt-8 text-center">
-                    <p className="text-slate-400 text-sm font-medium">
-                      {!isCameraEnabled ? 'Câmera em Standby' : 'Scanner Ativo'}
-                    </p>
-                    <p className="text-slate-600 text-[10px] uppercase tracking-widest mt-2">Tecnologia de Baixo Consumo</p>
-                </div>
             </div>
-            
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50 backdrop-blur-sm">
-                <i className="fas fa-layer-group text-emerald-500/40 mb-3 text-lg"></i>
+              <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50">
                 <div className="text-2xl font-black text-white">{history.length}</div>
-                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Histórico</div>
+                <div className="text-[9px] text-slate-500 font-bold uppercase">Histórico</div>
               </div>
-              <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50 backdrop-blur-sm">
-                <i className="fas fa-robot text-cyan-500/40 mb-3 text-lg"></i>
-                <div className="text-2xl font-black text-white">Gemini</div>
-                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Analista IA</div>
+              <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50">
+                <div className="text-2xl font-black text-white">IA</div>
+                <div className="text-[9px] text-slate-500 font-bold uppercase">Habilitada</div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="py-4 animate-in fade-in duration-500">
-            <ScanHistory 
-              history={history} 
-              onClear={() => setHistory([])} 
-              onSelect={setSelectedResult}
-            />
-          </div>
+          <ScanHistory history={history} onClear={() => setHistory([])} onSelect={setSelectedResult} />
         )}
       </main>
 
       {/* Floating Bottom Nav */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[280px] h-16 bg-slate-900/80 backdrop-blur-2xl rounded-full border border-slate-800 flex items-center justify-between px-2 z-40 shadow-2xl safe-bottom">
-        <button 
-          onClick={() => {
-            setActiveTab(AppTab.SCANNER);
-            setIsTorchOn(false);
-            setMultiScanResults(null);
-          }}
-          className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.SCANNER ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
-        >
-          <i className="fas fa-qrcode"></i>
-          <span className="text-[10px] uppercase tracking-widest">Lente</span>
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[280px] h-16 bg-slate-900/80 backdrop-blur-2xl rounded-full border border-slate-800 flex items-center justify-between px-2 z-40 shadow-2xl">
+        <button onClick={() => setActiveTab(AppTab.SCANNER)} className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.SCANNER ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}>
+          <i className="fas fa-qrcode"></i><span className="text-[10px] uppercase">Lente</span>
         </button>
-        <button 
-          onClick={() => {
-            setActiveTab(AppTab.HISTORY);
-            setIsTorchOn(false);
-            setMultiScanResults(null);
-          }}
-          className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.HISTORY ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
-        >
-          <i className="fas fa-history"></i>
-          <span className="text-[10px] uppercase tracking-widest">Logs</span>
+        <button onClick={() => setActiveTab(AppTab.HISTORY)} className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.HISTORY ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}>
+          <i className="fas fa-history"></i><span className="text-[10px] uppercase">Logs</span>
         </button>
       </div>
 
-      {/* Multi-result Selection Modal */}
-      {multiScanResults && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+      {/* Result Modal UI */}
+      {selectedResult && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-slate-900 w-full rounded-t-[3rem] border-t border-slate-800 shadow-2xl animate-in slide-in-from-bottom-full duration-500 max-w-md">
             <div className="p-8 pt-6 pb-12">
               <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mb-8"></div>
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-xl font-black text-white">Códigos Encontrados</h2>
-                  <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-bold">Toque para analisar</p>
-                </div>
-                <button onClick={() => setMultiScanResults(null)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400">
-                  <i className="fas fa-times"></i>
-                </button>
-              </div>
-
-              <div className="space-y-3 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2 mb-8">
-                {multiScanResults.map((content, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleScan(content)}
-                    className="w-full bg-slate-950 p-5 rounded-[2rem] border border-slate-800 hover:border-emerald-500/50 text-left transition-all active:scale-98 group flex items-center gap-4"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center shrink-0">
-                      <i className={`fas ${detectType(content) === 'url' ? 'fa-link text-emerald-500' : 'fa-font text-slate-400'}`}></i>
-                    </div>
-                    <p className="text-slate-300 font-medium truncate flex-1">{content}</p>
-                    <i className="fas fa-arrow-right text-slate-700 group-hover:text-emerald-500 transition-colors"></i>
-                  </button>
-                ))}
-              </div>
-
-              <button 
-                onClick={() => {
-                  multiScanResults.forEach(content => {
-                    const res: ScanResult = {
-                      id: Math.random().toString(36).substr(2, 9),
-                      content,
-                      timestamp: Date.now(),
-                      type: detectType(content)
-                    };
-                    setHistory(prev => [res, ...prev]);
-                  });
-                  setMultiScanResults(null);
-                  setActiveTab(AppTab.HISTORY);
-                }}
-                className="w-full py-5 bg-emerald-600 rounded-[2rem] font-black text-sm text-white uppercase tracking-widest shadow-xl shadow-emerald-900/20 active:scale-95 transition-all"
-              >
-                Adicionar todos à lista
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Result Modal UI */}
-      {selectedResult && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-0 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-slate-900 w-full rounded-t-[3rem] border-t border-slate-800 shadow-2xl animate-in slide-in-from-bottom-full duration-500 ease-out max-w-md">
-            <div className="p-8 pt-6 pb-12">
-              <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mb-8"></div>
               <div className="flex justify-between items-center mb-8">
-                <div className="bg-emerald-500/10 text-emerald-500 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
-                  {selectedResult.type} Detectado
-                </div>
-                <button onClick={() => setSelectedResult(null)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400">
-                  <i className="fas fa-times"></i>
-                </button>
+                <div className="bg-emerald-500/10 text-emerald-500 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">{selectedResult.type} Detectado</div>
+                <button onClick={() => { setSelectedResult(null); setAiAnalysis(null); setIsAnalyzing(false); }} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400"><i className="fas fa-times"></i></button>
               </div>
+              
               <div className="bg-slate-950 p-6 rounded-[2.5rem] border border-slate-800 mb-8 max-h-40 overflow-y-auto custom-scrollbar">
                 <p className="text-slate-100 font-medium text-lg leading-relaxed break-all">{selectedResult.content}</p>
               </div>
-              {aiAnalysis ? (
-                <div className="mb-8 p-6 rounded-[2.5rem] bg-emerald-500/5 border border-emerald-500/20 animate-in zoom-in duration-500">
-                  <div className="flex items-center gap-3 mb-3 text-emerald-400 text-[10px] font-black uppercase tracking-widest">
-                    <i className="fas fa-sparkles"></i> Inteligência Gemini
+
+              {/* Área de Análise IA Integrada */}
+              {isAnalyzing ? (
+                <div className="mb-8 p-6 rounded-[2.5rem] bg-emerald-500/5 border border-emerald-500/20">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">{analysisStatus}</span>
+                    <span className="text-[10px] font-black text-emerald-500">{analysisProgress}%</span>
                   </div>
+                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${analysisProgress}%` }}></div>
+                  </div>
+                </div>
+              ) : aiAnalysis ? (
+                <div className="mb-8 p-6 rounded-[2.5rem] bg-emerald-500/5 border border-emerald-500/20 animate-in zoom-in duration-300">
+                  <div className="flex items-center gap-2 mb-3 text-emerald-400 text-[10px] font-black uppercase tracking-widest"><i className="fas fa-sparkles"></i> Análise IA</div>
                   <p className="text-slate-300 text-sm leading-relaxed font-medium">"{aiAnalysis}"</p>
                 </div>
               ) : (
-                <button 
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  className="w-full mb-8 py-5 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-[2rem] font-black text-sm text-white flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-emerald-900/20 uppercase tracking-widest"
-                >
+                <button onClick={handleAnalyze} className="w-full mb-8 py-5 px-6 bg-emerald-600 hover:bg-emerald-500 rounded-[2rem] font-black text-sm text-white flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl uppercase tracking-widest">
                   <i className="fas fa-wand-magic-sparkles"></i> Analisar com IA
                 </button>
               )}
+
               <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => { 
-                  navigator.clipboard.writeText(selectedResult.content); 
-                  showAlert("Copiado", "O conteúdo foi enviado para sua área de transferência.", "success");
-                }} className="py-5 bg-slate-800 rounded-[2rem] font-bold text-sm text-white flex items-center justify-center gap-3 active:scale-95 transition-all">
+                <button onClick={() => { navigator.clipboard.writeText(selectedResult.content); showAlert("Copiado", "Conteúdo enviado para área de transferência.", "success"); }} className="py-5 bg-slate-800 rounded-[2rem] font-bold text-sm text-white flex items-center justify-center gap-3 active:scale-95 transition-all">
                   <i className="fas fa-copy opacity-40"></i> Copiar
                 </button>
-                {selectedResult.type === 'url' ? (
-                  <button onClick={() => window.open(selectedResult.content.startsWith('http') ? selectedResult.content : `https://${selectedResult.content}`, '_blank')} className="py-5 bg-white text-slate-950 rounded-[2rem] font-bold text-sm flex items-center justify-center gap-3 active:scale-95 transition-all">
-                    <i className="fas fa-external-link-alt"></i> Visitar
-                  </button>
-                ) : (
-                  <button onClick={() => navigator.share && navigator.share({text: selectedResult.content})} className="py-5 bg-slate-800 rounded-[2rem] font-bold text-sm text-white flex items-center justify-center gap-3 active:scale-95 transition-all">
-                    <i className="fas fa-share-nodes opacity-40"></i> Enviar
-                  </button>
-                )}
+                <button onClick={() => selectedResult.type === 'url' ? window.open(selectedResult.content.startsWith('http') ? selectedResult.content : `https://${selectedResult.content}`, '_blank') : (navigator.share && navigator.share({text: selectedResult.content}))} className="py-5 bg-white text-slate-950 rounded-[2rem] font-bold text-sm flex items-center justify-center gap-3 active:scale-95 transition-all">
+                  <i className={`fas ${selectedResult.type === 'url' ? 'fa-external-link-alt' : 'fa-share-nodes'}`}></i> {selectedResult.type === 'url' ? 'Acessar' : 'Enviar'}
+                </button>
               </div>
             </div>
           </div>
