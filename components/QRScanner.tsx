@@ -5,9 +5,11 @@ import jsQR from 'jsqr';
 interface QRScannerProps {
   onScan: (result: string) => void;
   isActive: boolean;
+  isTorchOn: boolean;
+  onTorchSupportChange: (supported: boolean) => void;
 }
 
-const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
+const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive, isTorchOn, onTorchSupportChange }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -28,7 +30,8 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
       videoRef.current.srcObject = null;
     }
     setIsCameraReady(false);
-  }, []);
+    onTorchSupportChange(false);
+  }, [onTorchSupportChange]);
 
   const startCamera = async () => {
     stopCamera();
@@ -51,12 +54,20 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
         videoRef.current.setAttribute('playsinline', 'true');
         
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().then(() => setIsCameraReady(true));
+          videoRef.current?.play().then(() => {
+            setIsCameraReady(true);
+            
+            // Verificar suporte a lanterna
+            const track = stream.getVideoTracks()[0];
+            const capabilities = track.getCapabilities() as any;
+            if (capabilities && capabilities.torch) {
+              onTorchSupportChange(true);
+            }
+          });
         };
       }
     } catch (err: any) {
       console.error("Camera error:", err);
-      // Fallback para qualquer câmera
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         streamRef.current = stream;
@@ -70,6 +81,19 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive }) => {
       }
     }
   };
+
+  // Gerenciar Lanterna
+  useEffect(() => {
+    if (streamRef.current && isCameraReady) {
+      const track = streamRef.current.getVideoTracks()[0];
+      const capabilities = track.getCapabilities() as any;
+      if (capabilities && capabilities.torch) {
+        track.applyConstraints({
+          advanced: [{ torch: isTorchOn }]
+        } as any).catch(err => console.error("Erro ao alternar lanterna:", err));
+      }
+    }
+  }, [isTorchOn, isCameraReady]);
 
   const tick = useCallback(() => {
     if (!isActive || !isCameraReady) return;

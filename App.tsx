@@ -12,6 +12,10 @@ const App: React.FC = () => {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCooldown, setIsCooldown] = useState(false);
+  
+  // Estados para lanterna
+  const [isTorchSupported, setIsTorchSupported] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('qr_history');
@@ -49,6 +53,7 @@ const App: React.FC = () => {
     
     setSelectedResult(result);
     setAiAnalysis(null);
+    setIsTorchOn(false); // Desliga a lanterna ao detectar um código
     
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     setTimeout(() => setIsCooldown(false), 2000);
@@ -82,7 +87,23 @@ const App: React.FC = () => {
         {activeTab === AppTab.SCANNER ? (
           <div className="py-4 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="relative pt-4">
-                <QRScanner onScan={handleScan} isActive={activeTab === AppTab.SCANNER && !selectedResult} />
+                <QRScanner 
+                  onScan={handleScan} 
+                  isActive={activeTab === AppTab.SCANNER && !selectedResult}
+                  isTorchOn={isTorchOn}
+                  onTorchSupportChange={setIsTorchSupported}
+                />
+                
+                {/* Botão de Lanterna Flutuante */}
+                {isTorchSupported && activeTab === AppTab.SCANNER && !selectedResult && (
+                  <button 
+                    onClick={() => setIsTorchOn(!isTorchOn)}
+                    className={`absolute top-8 right-4 w-12 h-12 rounded-full flex items-center justify-center transition-all z-20 ${isTorchOn ? 'bg-emerald-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-slate-800/80 text-slate-400 backdrop-blur-md'}`}
+                  >
+                    <i className={`fas fa-bolt ${isTorchOn ? 'animate-pulse' : ''}`}></i>
+                  </button>
+                )}
+
                 <div className="mt-8 text-center">
                     <p className="text-slate-400 text-sm font-medium">Aponte para um código QR</p>
                     <p className="text-slate-600 text-[10px] uppercase tracking-widest mt-2">O processamento é automático</p>
@@ -175,14 +196,20 @@ const App: React.FC = () => {
       {/* Floating Bottom Nav */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[280px] h-16 bg-slate-900/80 backdrop-blur-2xl rounded-full border border-slate-800 flex items-center justify-between px-2 z-40 shadow-2xl safe-bottom">
         <button 
-          onClick={() => setActiveTab(AppTab.SCANNER)}
+          onClick={() => {
+            setActiveTab(AppTab.SCANNER);
+            setIsTorchOn(false);
+          }}
           className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.SCANNER ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
         >
           <i className="fas fa-qrcode"></i>
           <span className="text-[10px] uppercase tracking-widest">Scanner</span>
         </button>
         <button 
-          onClick={() => setActiveTab(AppTab.HISTORY)}
+          onClick={() => {
+            setActiveTab(AppTab.HISTORY);
+            setIsTorchOn(false);
+          }}
           className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.HISTORY ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
         >
           <i className="fas fa-history"></i>
