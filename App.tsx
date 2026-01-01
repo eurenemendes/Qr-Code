@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import jsQR from 'jsqr';
 import QRScanner from './components/QRScanner';
 import ScanHistory from './components/ScanHistory';
+import ImageCropper from './components/ImageCropper';
 import { AppTab, ScanResult } from './types';
 import { analyzeQRContent } from './services/geminiService';
 
@@ -21,6 +22,7 @@ const App: React.FC = () => {
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [multiScanResults, setMultiScanResults] = useState<string[] | null>(null);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -75,7 +77,6 @@ const App: React.FC = () => {
     };
 
     setHistory(prev => {
-      // Evita duplicatas imediatas
       if (prev.length > 0 && prev[0].content === content) return prev;
       return [result, ...prev];
     });
@@ -89,64 +90,64 @@ const App: React.FC = () => {
     setTimeout(() => setIsCooldown(false), 2000);
   }, [isCooldown]);
 
+  const processImageForQR = (imageSrc: string) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) return;
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+      context.drawImage(img, 0, 0);
+      
+      const results: string[] = [];
+      let searching = true;
+      let attempts = 0;
+      const MAX_ATTEMPTS = 10;
+
+      while (searching && attempts < MAX_ATTEMPTS) {
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+        if (code) {
+          results.push(code.data);
+          const { topLeft, topRight, bottomRight, bottomLeft } = code.location;
+          context.fillStyle = 'black';
+          context.beginPath();
+          context.moveTo(topLeft.x, topLeft.y);
+          context.lineTo(topRight.x, topRight.y);
+          context.lineTo(bottomRight.x, bottomRight.y);
+          context.lineTo(bottomLeft.x, bottomLeft.y);
+          context.closePath();
+          context.fill();
+          attempts++;
+        } else {
+          searching = false;
+        }
+      }
+
+      if (results.length === 1) {
+        handleScan(results[0]);
+      } else if (results.length > 1) {
+        const uniqueResults = Array.from(new Set(results));
+        setMultiScanResults(uniqueResults);
+      } else {
+        alert("Nenhum QR Code encontrado nesta área.");
+      }
+    };
+    img.src = imageSrc;
+    setImageToCrop(null);
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        if (!context) return;
-
-        canvas.width = img.width;
-        canvas.height = img.height;
-        context.drawImage(img, 0, 0);
-        
-        const results: string[] = [];
-        let searching = true;
-        let attempts = 0;
-        const MAX_ATTEMPTS = 10; // Limite para evitar loops infinitos
-
-        while (searching && attempts < MAX_ATTEMPTS) {
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-          if (code) {
-            results.push(code.data);
-            
-            // Mascara a área encontrada para buscar o próximo QR Code na mesma imagem
-            const { topLeft, topRight, bottomRight, bottomLeft } = code.location;
-            context.fillStyle = 'black';
-            context.beginPath();
-            context.moveTo(topLeft.x, topLeft.y);
-            context.lineTo(topRight.x, topRight.y);
-            context.lineTo(bottomRight.x, bottomRight.y);
-            context.lineTo(bottomLeft.x, bottomLeft.y);
-            context.closePath();
-            context.fill();
-            
-            attempts++;
-          } else {
-            searching = false;
-          }
-        }
-
-        if (results.length === 1) {
-          handleScan(results[0]);
-        } else if (results.length > 1) {
-          // Remove duplicatas detectadas por erros de precisão no mascaramento
-          const uniqueResults = Array.from(new Set(results));
-          setMultiScanResults(uniqueResults);
-        } else {
-          alert("Nenhum QR Code encontrado nesta imagem.");
-        }
-        
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      };
-      img.src = e.target?.result as string;
+      setImageToCrop(e.target?.result as string);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsDataURL(file);
   };
@@ -164,23 +165,16 @@ const App: React.FC = () => {
       <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
         <i className="fas fa-camera-slash text-3xl text-red-500"></i>
       </div>
-      <h2 className="text-xl font-bold text-white mb-4">Acesso à Câmera Negado</h2>
+      <h2 className="text-xl font-bold text-white mb-4">Câmera Indisponível</h2>
       <p className="text-slate-400 text-sm leading-relaxed mb-8">
-        Para escanear códigos QR em tempo real, precisamos da sua câmera. 
-        Você ainda pode carregar imagens da sua galeria abaixo.
+        Use a opção de carregar imagem abaixo para analisar códigos da sua galeria.
       </p>
       <div className="space-y-3 w-full">
         <button 
           onClick={() => fileInputRef.current?.click()}
-          className="w-full py-4 bg-white text-slate-900 rounded-2xl font-bold active:scale-95 transition-all flex items-center justify-center gap-3"
+          className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold active:scale-95 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20"
         >
-          <i className="fas fa-image"></i> Escolher Imagem
-        </button>
-        <button 
-          onClick={() => window.location.reload()}
-          className="w-full py-4 bg-slate-800 rounded-2xl font-bold text-white active:scale-95 transition-all"
-        >
-          Tentar Reativar Câmera
+          <i className="fas fa-image"></i> Abrir Galeria
         </button>
       </div>
     </div>
@@ -196,6 +190,14 @@ const App: React.FC = () => {
         className="hidden" 
       />
 
+      {imageToCrop && (
+        <ImageCropper 
+          imageSrc={imageToCrop} 
+          onConfirm={processImageForQR} 
+          onCancel={() => setImageToCrop(null)} 
+        />
+      )}
+
       <header className="p-6 pb-2 flex items-center justify-between z-10">
         <div className="flex flex-col">
           <h1 className="text-xl font-black tracking-tight text-white leading-none">
@@ -206,7 +208,7 @@ const App: React.FC = () => {
         <div className="bg-slate-900/50 p-2 px-3 rounded-full border border-slate-800 flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full ${permission === 'granted' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              {permission === 'granted' ? 'Câmera Ativa' : 'Galeria'}
+              {permission === 'granted' ? 'Ao Vivo' : 'Estático'}
             </span>
         </div>
       </header>
@@ -221,14 +223,14 @@ const App: React.FC = () => {
                   <>
                     <QRScanner 
                       onScan={handleScan} 
-                      isActive={activeTab === AppTab.SCANNER && !selectedResult && !multiScanResults}
+                      isActive={activeTab === AppTab.SCANNER && !selectedResult && !multiScanResults && !imageToCrop}
                       isTorchOn={isTorchOn}
                       onTorchSupportChange={setIsTorchSupported}
                       onError={(err) => err.name === 'NotAllowedError' && setPermission('denied')}
                     />
                     
                     <div className="absolute top-8 right-4 flex flex-col gap-3 z-20">
-                      {isTorchSupported && !selectedResult && !multiScanResults && (
+                      {isTorchSupported && !selectedResult && !multiScanResults && !imageToCrop && (
                         <button 
                           onClick={() => setIsTorchOn(!isTorchOn)}
                           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isTorchOn ? 'bg-emerald-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-slate-800/80 text-slate-400 backdrop-blur-md'}`}
@@ -240,7 +242,7 @@ const App: React.FC = () => {
                         onClick={() => fileInputRef.current?.click()}
                         className="w-12 h-12 rounded-full bg-slate-800/80 text-slate-400 backdrop-blur-md flex items-center justify-center transition-all active:scale-90"
                       >
-                        <i className="fas fa-image"></i>
+                        <i className="fas fa-crop-simple"></i>
                       </button>
                     </div>
                   </>
@@ -248,22 +250,22 @@ const App: React.FC = () => {
 
                 <div className="mt-8 text-center">
                     <p className="text-slate-400 text-sm font-medium">
-                      {permission === 'denied' ? 'Acesso limitado à galeria' : 'Aponte para um código QR'}
+                      {permission === 'denied' ? 'Selecione uma imagem' : 'Aponte ou Recorte'}
                     </p>
-                    <p className="text-slate-600 text-[10px] uppercase tracking-widest mt-2">Suporte para links, textos e vCards</p>
+                    <p className="text-slate-600 text-[10px] uppercase tracking-widest mt-2">Tecnologia Multi-Scan integrada</p>
                 </div>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50 backdrop-blur-sm">
-                <i className="fas fa-bolt text-emerald-500/40 mb-3 text-lg"></i>
+                <i className="fas fa-layer-group text-emerald-500/40 mb-3 text-lg"></i>
                 <div className="text-2xl font-black text-white">{history.length}</div>
-                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Total Scans</div>
+                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Histórico</div>
               </div>
               <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-slate-800/50 backdrop-blur-sm">
-                <i className="fas fa-microchip text-cyan-500/40 mb-3 text-lg"></i>
-                <div className="text-2xl font-black text-white">IA</div>
-                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Análise Ativa</div>
+                <i className="fas fa-robot text-cyan-500/40 mb-3 text-lg"></i>
+                <div className="text-2xl font-black text-white">Gemini</div>
+                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Analista IA</div>
               </div>
             </div>
           </div>
@@ -289,7 +291,7 @@ const App: React.FC = () => {
           className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.SCANNER ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
         >
           <i className="fas fa-qrcode"></i>
-          <span className="text-[10px] uppercase tracking-widest">Scanner</span>
+          <span className="text-[10px] uppercase tracking-widest">Lente</span>
         </button>
         <button 
           onClick={() => {
@@ -312,15 +314,15 @@ const App: React.FC = () => {
               <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mb-8"></div>
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h2 className="text-xl font-black text-white">Múltiplos Códigos</h2>
-                  <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-bold">Escolha um para analisar</p>
+                  <h2 className="text-xl font-black text-white">Códigos Encontrados</h2>
+                  <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-bold">Toque para analisar</p>
                 </div>
                 <button onClick={() => setMultiScanResults(null)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400">
                   <i className="fas fa-times"></i>
                 </button>
               </div>
 
-              <div className="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2 mb-8">
+              <div className="space-y-3 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2 mb-8">
                 {multiScanResults.map((content, idx) => (
                   <button
                     key={idx}
@@ -352,7 +354,7 @@ const App: React.FC = () => {
                 }}
                 className="w-full py-5 bg-emerald-600 rounded-[2rem] font-black text-sm text-white uppercase tracking-widest shadow-xl shadow-emerald-900/20 active:scale-95 transition-all"
               >
-                Salvar todos no histórico
+                Adicionar todos à lista
               </button>
             </div>
           </div>
