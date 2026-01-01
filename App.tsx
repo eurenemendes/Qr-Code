@@ -112,13 +112,13 @@ const App: React.FC = () => {
 
         if (code) {
           results.push(code.data);
-          const { topLeft, topRight, bottomRight, bottomLeft } = code.location;
+          const { topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner } = code.location;
           context.fillStyle = 'black';
           context.beginPath();
-          context.moveTo(topLeft.x, topLeft.y);
-          context.lineTo(topRight.x, topRight.y);
-          context.lineTo(bottomRight.x, bottomRight.y);
-          context.lineTo(bottomLeft.x, bottomLeft.y);
+          context.moveTo(topLeftCorner.x, topLeftCorner.y);
+          context.lineTo(topRightCorner.x, topRightCorner.y);
+          context.lineTo(bottomRightCorner.x, bottomRightCorner.y);
+          context.lineTo(bottomLeftCorner.x, bottomLeftCorner.y);
           context.closePath();
           context.fill();
           attempts++;

@@ -156,7 +156,7 @@ const QRScanner: React.FC<QRScannerProps> = ({
   // Função para converter coordenadas do vídeo para a tela (levando em conta object-cover)
   const getOverlayPoints = () => {
     if (!detectedLocation || !videoRef.current) return '';
-    const { topLeft, topRight, bottomRight, bottomLeft } = detectedLocation;
+    const { topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner } = detectedLocation;
     const v = videoRef.current;
     
     // Como usamos object-cover em um container aspect-square:
@@ -174,7 +174,7 @@ const QRScanner: React.FC<QRScannerProps> = ({
       return `${p.x * scale - offsetX},${p.y * scale - offsetY}`;
     };
 
-    return `${mapPoint(topLeft)} ${mapPoint(topRight)} ${mapPoint(bottomRight)} ${mapPoint(bottomLeft)}`;
+    return `${mapPoint(topLeftCorner)} ${mapPoint(topRightCorner)} ${mapPoint(bottomRightCorner)} ${mapPoint(bottomLeftCorner)}`;
   };
 
   return (
