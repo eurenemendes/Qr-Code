@@ -15,12 +15,25 @@ interface CustomAlert {
   type: 'success' | 'error' | 'warning' | 'info';
 }
 
+const ANALYSIS_STEPS = [
+  "Iniciando motores de IA...",
+  "Extraindo metadados...",
+  "Decodificando padrões complexos...",
+  "Consultando base Gemini...",
+  "Verificando integridade de links...",
+  "Avaliando riscos de segurança...",
+  "Sintetizando explicação...",
+  "Finalizando relatório..."
+];
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.SCANNER);
   const [history, setHistory] = useState<ScanResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<ScanResult | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStatus, setAnalysisStatus] = useState("");
   const [isCooldown, setIsCooldown] = useState(false);
   
   const [permission, setPermission] = useState<PermissionStatus>('checking');
@@ -173,10 +186,42 @@ const App: React.FC = () => {
 
   const handleAnalyze = async () => {
     if (!selectedResult || isAnalyzing) return;
+    
     setIsAnalyzing(true);
-    const analysis = await analyzeQRContent(selectedResult.content);
-    setAiAnalysis(analysis);
-    setIsAnalyzing(false);
+    setAnalysisProgress(0);
+    setAnalysisStatus(ANALYSIS_STEPS[0]);
+
+    // Simulação de progresso inteligente
+    let currentProgress = 0;
+    const progressInterval = setInterval(() => {
+      currentProgress += Math.random() * (currentProgress > 80 ? 0.5 : 5);
+      if (currentProgress > 95) currentProgress = 95;
+      
+      setAnalysisProgress(Math.floor(currentProgress));
+      
+      // Mudar mensagens de status baseado no progresso
+      const stepIndex = Math.min(
+        Math.floor((currentProgress / 100) * ANALYSIS_STEPS.length),
+        ANALYSIS_STEPS.length - 1
+      );
+      setAnalysisStatus(ANALYSIS_STEPS[stepIndex]);
+    }, 150);
+
+    try {
+      const analysis = await analyzeQRContent(selectedResult.content);
+      clearInterval(progressInterval);
+      setAnalysisProgress(100);
+      setAnalysisStatus("Análise Concluída!");
+      
+      setTimeout(() => {
+        setAiAnalysis(analysis);
+        setIsAnalyzing(false);
+      }, 500);
+    } catch (error) {
+      clearInterval(progressInterval);
+      setIsAnalyzing(false);
+      showAlert("Erro na IA", "Não foi possível conectar ao cérebro digital.", "error");
+    }
   };
 
   const renderCameraPlaceholder = () => (
@@ -234,7 +279,54 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Alerta Personalizado (Sistema de Notificação Profissional) */}
+      {/* Overlay de Análise IA com Progresso */}
+      {isAnalyzing && (
+        <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-2xl animate-in fade-in duration-300">
+          <div className="relative w-48 h-48 flex items-center justify-center mb-10">
+            {/* Anéis de Progresso */}
+            <svg className="w-full h-full -rotate-90">
+              <circle
+                cx="96" cy="96" r="80"
+                className="stroke-slate-800 fill-none"
+                strokeWidth="8"
+              />
+              <circle
+                cx="96" cy="96" r="80"
+                className="stroke-emerald-500 fill-none transition-all duration-300 ease-out"
+                strokeWidth="8"
+                strokeDasharray={2 * Math.PI * 80}
+                strokeDashoffset={2 * Math.PI * 80 * (1 - analysisProgress / 100)}
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-4xl font-black text-white">{analysisProgress}%</span>
+              <span className="text-[10px] font-black text-emerald-500/60 uppercase tracking-widest mt-1">Status IA</span>
+            </div>
+            {/* Efeito de Scanner Animado no Círculo */}
+            <div className="absolute inset-0 rounded-full border border-emerald-500/20 animate-ping"></div>
+          </div>
+
+          <div className="text-center px-12 max-w-xs">
+            <h3 className="text-white font-black text-xl mb-3 animate-pulse">Analisando Dados</h3>
+            <p className="text-slate-400 text-sm font-medium min-h-[40px] italic">
+              "{analysisStatus}"
+            </p>
+          </div>
+
+          <div className="mt-12 flex gap-1">
+            {[...Array(3)].map((_, i) => (
+              <div 
+                key={i} 
+                className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.2}s` }}
+              ></div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Alerta Personalizado */}
       {customAlert && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="w-full max-w-[320px] bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
@@ -511,8 +603,7 @@ const App: React.FC = () => {
                   disabled={isAnalyzing}
                   className="w-full mb-8 py-5 px-6 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-[2rem] font-black text-sm text-white flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-emerald-900/20 uppercase tracking-widest"
                 >
-                  {isAnalyzing ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-wand-magic-sparkles"></i>}
-                  {isAnalyzing ? "Processando..." : "Analisar com IA"}
+                  <i className="fas fa-wand-magic-sparkles"></i> Analisar com IA
                 </button>
               )}
               <div className="grid grid-cols-2 gap-4">
