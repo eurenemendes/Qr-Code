@@ -17,13 +17,13 @@ const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCooldown, setIsCooldown] = useState(false);
   
-  // Estados para permissão, lanterna, upload e energia da câmera
   const [permission, setPermission] = useState<PermissionStatus>('checking');
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
-  const [isCameraEnabled, setIsCameraEnabled] = useState(false); // Inicia desligada
+  const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [multiScanResults, setMultiScanResults] = useState<string[] | null>(null);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -46,7 +46,6 @@ const App: React.FC = () => {
         setPermission(result.state);
         result.onchange = () => setPermission(result.state);
       } else {
-        // Apenas verifica se existe permissão sem manter o stream aberto
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         stream.getTracks().forEach(track => track.stop());
         setPermission('granted');
@@ -106,23 +105,30 @@ const App: React.FC = () => {
       const results: string[] = [];
       let searching = true;
       let attempts = 0;
-      const MAX_ATTEMPTS = 10;
+      const MAX_ATTEMPTS = 15;
+
+      const tempCanvas = document.createElement('canvas');
+      const tempContext = tempCanvas.getContext('2d');
+      if (!tempContext) return;
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      tempContext.drawImage(img, 0, 0);
 
       while (searching && attempts < MAX_ATTEMPTS) {
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const imageData = tempContext.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height);
 
         if (code) {
           results.push(code.data);
           const { topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner } = code.location;
-          context.fillStyle = 'black';
-          context.beginPath();
-          context.moveTo(topLeftCorner.x, topLeftCorner.y);
-          context.lineTo(topRightCorner.x, topRightCorner.y);
-          context.lineTo(bottomRightCorner.x, bottomRightCorner.y);
-          context.lineTo(bottomLeftCorner.x, bottomLeftCorner.y);
-          context.closePath();
-          context.fill();
+          tempContext.fillStyle = 'black';
+          tempContext.beginPath();
+          tempContext.moveTo(topLeftCorner.x, topLeftCorner.y);
+          tempContext.lineTo(topRightCorner.x, topRightCorner.y);
+          tempContext.lineTo(bottomRightCorner.x, bottomRightCorner.y);
+          tempContext.lineTo(bottomLeftCorner.x, bottomLeftCorner.y);
+          tempContext.closePath();
+          tempContext.fill();
           attempts++;
         } else {
           searching = false;
@@ -135,7 +141,7 @@ const App: React.FC = () => {
         const uniqueResults = Array.from(new Set(results));
         setMultiScanResults(uniqueResults);
       } else {
-        alert("Nenhum QR Code encontrado nesta área.");
+        alert("Nenhum QR Code encontrado. Tente recortar a área do código para melhor detecção.");
       }
     };
     img.src = imageSrc;
@@ -148,7 +154,7 @@ const App: React.FC = () => {
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      setImageToCrop(e.target?.result as string);
+      setPendingImage(e.target?.result as string);
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsDataURL(file);
@@ -215,6 +221,48 @@ const App: React.FC = () => {
           onConfirm={processImageForQR} 
           onCancel={() => setImageToCrop(null)} 
         />
+      )}
+
+      {/* Modal de Escolha após Upload */}
+      {pendingImage && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="w-full max-w-sm bg-slate-900 rounded-[2.5rem] border border-slate-800 p-8 shadow-2xl animate-in zoom-in-95 duration-500">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6">
+                <i className="fas fa-file-image text-2xl text-emerald-500"></i>
+              </div>
+              <h2 className="text-xl font-black text-white mb-2">Imagem Carregada</h2>
+              <p className="text-sm text-slate-400 mb-8 leading-relaxed">Como você deseja processar esta imagem para encontrar o QR Code?</p>
+              
+              <div className="space-y-3 w-full">
+                <button 
+                  onClick={() => {
+                    processImageForQR(pendingImage);
+                    setPendingImage(null);
+                  }}
+                  className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold active:scale-95 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-900/20"
+                >
+                  <i className="fas fa-expand"></i> Imagem Inteira
+                </button>
+                <button 
+                  onClick={() => {
+                    setImageToCrop(pendingImage);
+                    setPendingImage(null);
+                  }}
+                  className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold active:scale-95 transition-all flex items-center justify-center gap-3"
+                >
+                  <i className="fas fa-crop-simple"></i> Recortar Área
+                </button>
+                <button 
+                  onClick={() => setPendingImage(null)}
+                  className="w-full py-3 text-slate-500 font-bold text-sm mt-2 active:scale-95 transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <header className="p-6 pb-2 flex items-center justify-between z-10">
