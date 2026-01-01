@@ -7,9 +7,16 @@ interface QRScannerProps {
   isActive: boolean;
   isTorchOn: boolean;
   onTorchSupportChange: (supported: boolean) => void;
+  onError?: (error: Error) => void;
 }
 
-const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive, isTorchOn, onTorchSupportChange }) => {
+const QRScanner: React.FC<QRScannerProps> = ({ 
+  onScan, 
+  isActive, 
+  isTorchOn, 
+  onTorchSupportChange,
+  onError 
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -56,8 +63,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive, isTorchOn, onTo
         videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play().then(() => {
             setIsCameraReady(true);
-            
-            // Verificar suporte a lanterna
             const track = stream.getVideoTracks()[0];
             const capabilities = track.getCapabilities() as any;
             if (capabilities && capabilities.torch) {
@@ -68,21 +73,16 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive, isTorchOn, onTo
       }
     } catch (err: any) {
       console.error("Camera error:", err);
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setIsCameraReady(true);
-        }
-      } catch (fallbackErr) {
-        setError("Câmera bloqueada ou não encontrada. Verifique as permissões de HTTPS.");
+      if (onError) onError(err);
+      
+      if (err.name === 'NotAllowedError') {
+        setError("Acesso à câmera negado pelo usuário.");
+      } else {
+        setError("Ocorreu um erro ao tentar acessar a câmera.");
       }
     }
   };
 
-  // Gerenciar Lanterna
   useEffect(() => {
     if (streamRef.current && isCameraReady) {
       const track = streamRef.current.getVideoTracks()[0];
@@ -139,7 +139,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScan, isActive, isTorchOn, onTo
 
   return (
     <div className="relative w-full max-w-md mx-auto aspect-square overflow-hidden rounded-[3rem] border-4 border-emerald-500/20 bg-slate-900 shadow-2xl">
-      {error ? (
+      {error && !isActive ? null : error ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-900 z-30">
           <i className="fas fa-exclamation-triangle text-3xl text-amber-500 mb-4"></i>
           <p className="text-slate-300 text-sm mb-6">{error}</p>
