@@ -23,6 +23,8 @@ const QRScanner: React.FC<QRScannerProps> = ({
   const requestRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [detectedLocation, setDetectedLocation] = useState<any>(null);
+  const [isSuccessAnimation, setIsSuccessAnimation] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (requestRef.current) {
@@ -38,6 +40,8 @@ const QRScanner: React.FC<QRScannerProps> = ({
     }
     setIsCameraReady(false);
     onTorchSupportChange(false);
+    setDetectedLocation(null);
+    setIsSuccessAnimation(false);
   }, [onTorchSupportChange]);
 
   const startCamera = async () => {
@@ -96,7 +100,7 @@ const QRScanner: React.FC<QRScannerProps> = ({
   }, [isTorchOn, isCameraReady]);
 
   const tick = useCallback(() => {
-    if (!isActive || !isCameraReady) return;
+    if (!isActive || !isCameraReady || isSuccessAnimation) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -114,13 +118,25 @@ const QRScanner: React.FC<QRScannerProps> = ({
         });
 
         if (code && code.data) {
-          onScan(code.data);
+          // Iniciar animação de sucesso
+          setIsSuccessAnimation(true);
+          setDetectedLocation(code.location);
+          
+          // Feedback tátil se disponível
+          if (navigator.vibrate) navigator.vibrate(50);
+
+          // Pequeno atraso para o usuário ver o destaque antes de disparar o onScan
+          setTimeout(() => {
+            onScan(code.data);
+            setDetectedLocation(null);
+            setIsSuccessAnimation(false);
+          }, 450);
           return;
         }
       }
     }
     requestRef.current = requestAnimationFrame(tick);
-  }, [isActive, isCameraReady, onScan]);
+  }, [isActive, isCameraReady, isSuccessAnimation, onScan]);
 
   useEffect(() => {
     if (isActive) startCamera();
@@ -129,16 +145,40 @@ const QRScanner: React.FC<QRScannerProps> = ({
   }, [isActive]);
 
   useEffect(() => {
-    if (isCameraReady && isActive) {
+    if (isCameraReady && isActive && !isSuccessAnimation) {
       requestRef.current = requestAnimationFrame(tick);
     }
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isCameraReady, isActive, tick]);
+  }, [isCameraReady, isActive, isSuccessAnimation, tick]);
+
+  // Função para converter coordenadas do vídeo para a tela (levando em conta object-cover)
+  const getOverlayPoints = () => {
+    if (!detectedLocation || !videoRef.current) return '';
+    const { topLeft, topRight, bottomRight, bottomLeft } = detectedLocation;
+    const v = videoRef.current;
+    
+    // Como usamos object-cover em um container aspect-square:
+    // Precisamos mapear as coordenadas do canvas (videoWidth x videoHeight) para o viewport do video element
+    const containerWidth = v.offsetWidth;
+    const containerHeight = v.offsetHeight;
+    const videoWidth = v.videoWidth;
+    const videoHeight = v.videoHeight;
+
+    const scale = Math.max(containerWidth / videoWidth, containerHeight / videoHeight);
+    const offsetX = (videoWidth * scale - containerWidth) / 2;
+    const offsetY = (videoHeight * scale - containerHeight) / 2;
+
+    const mapPoint = (p: { x: number, y: number }) => {
+      return `${p.x * scale - offsetX},${p.y * scale - offsetY}`;
+    };
+
+    return `${mapPoint(topLeft)} ${mapPoint(topRight)} ${mapPoint(bottomRight)} ${mapPoint(bottomLeft)}`;
+  };
 
   return (
-    <div className="relative w-full max-w-md mx-auto aspect-square overflow-hidden rounded-[3rem] border-4 border-emerald-500/20 bg-slate-900 shadow-2xl">
+    <div className="relative w-full max-w-md mx-auto aspect-square overflow-hidden rounded-[3rem] border-4 border-emerald-500/20 bg-slate-900 shadow-2xl transition-all duration-300">
       {error && !isActive ? null : error ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-900 z-30">
           <i className="fas fa-exclamation-triangle text-3xl text-amber-500 mb-4"></i>
@@ -147,10 +187,30 @@ const QRScanner: React.FC<QRScannerProps> = ({
         </div>
       ) : (
         <>
-          <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+          <video 
+            ref={videoRef} 
+            className={`w-full h-full object-cover transition-opacity duration-300 ${isSuccessAnimation ? 'opacity-60' : 'opacity-100'}`} 
+            muted 
+            playsInline 
+          />
           <canvas ref={canvasRef} className="hidden" />
           
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+          {/* Overlay de Destaque do QR Code */}
+          {detectedLocation && (
+            <svg className="absolute inset-0 z-20 w-full h-full pointer-events-none overflow-visible">
+              <polygon
+                points={getOverlayPoints()}
+                className="fill-emerald-500/30 stroke-emerald-400 stroke-[4] animate-[ping_0.6s_ease-out_infinite]"
+                style={{ filter: 'drop-shadow(0 0 8px rgba(52, 211, 153, 0.8))' }}
+              />
+              <polygon
+                points={getOverlayPoints()}
+                className="fill-transparent stroke-emerald-400 stroke-[6] transition-all duration-300"
+              />
+            </svg>
+          )}
+
+          <div className={`absolute inset-0 pointer-events-none flex items-center justify-center z-10 transition-opacity duration-300 ${isSuccessAnimation ? 'opacity-0' : 'opacity-100'}`}>
              <div className="w-64 h-64 border-2 border-emerald-500/40 rounded-[2.5rem] relative overflow-hidden">
                 <div className="scan-line absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_20px_rgba(52,211,153,0.8)]"></div>
                 
@@ -168,6 +228,9 @@ const QRScanner: React.FC<QRScannerProps> = ({
               <p className="mt-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Iniciando Sensor</p>
             </div>
           )}
+
+          {/* Efeito visual de captura com flash */}
+          <div className={`absolute inset-0 bg-white z-40 pointer-events-none transition-opacity duration-150 ${isSuccessAnimation ? 'opacity-20' : 'opacity-0'}`}></div>
         </>
       )}
     </div>
