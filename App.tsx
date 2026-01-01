@@ -9,6 +9,12 @@ import { analyzeQRContent } from './services/geminiService';
 
 type PermissionStatus = 'prompt' | 'granted' | 'denied' | 'checking';
 
+interface CustomAlert {
+  title: string;
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+}
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.SCANNER);
   const [history, setHistory] = useState<ScanResult[]>([]);
@@ -24,6 +30,7 @@ const App: React.FC = () => {
   const [multiScanResults, setMultiScanResults] = useState<string[] | null>(null);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [customAlert, setCustomAlert] = useState<CustomAlert | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,6 +65,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('qr_history', JSON.stringify(history));
   }, [history]);
+
+  const showAlert = (title: string, message: string, type: CustomAlert['type'] = 'info') => {
+    setCustomAlert({ title, message, type });
+  };
 
   const detectType = (content: string): ScanResult['type'] => {
     if (content.startsWith('http')) return 'url';
@@ -141,7 +152,7 @@ const App: React.FC = () => {
         const uniqueResults = Array.from(new Set(results));
         setMultiScanResults(uniqueResults);
       } else {
-        alert("Nenhum QR Code encontrado. Tente recortar a área do código para melhor detecção.");
+        showAlert("Busca Concluída", "Nenhum QR Code foi detectado nesta imagem. Tente usar o ajuste de recorte.", "warning");
       }
     };
     img.src = imageSrc;
@@ -221,6 +232,37 @@ const App: React.FC = () => {
           onConfirm={processImageForQR} 
           onCancel={() => setImageToCrop(null)} 
         />
+      )}
+
+      {/* Alerta Personalizado (Sistema de Notificação Profissional) */}
+      {customAlert && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="w-full max-w-[320px] bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
+            <div className="p-8 flex flex-col items-center text-center">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-inner ${
+                customAlert.type === 'success' ? 'bg-emerald-500/10 text-emerald-500' :
+                customAlert.type === 'error' ? 'bg-red-500/10 text-red-500' :
+                customAlert.type === 'warning' ? 'bg-amber-500/10 text-amber-500' :
+                'bg-blue-500/10 text-blue-500'
+              }`}>
+                <i className={`fas fa-lg ${
+                  customAlert.type === 'success' ? 'fa-check-circle' :
+                  customAlert.type === 'error' ? 'fa-circle-exclamation' :
+                  customAlert.type === 'warning' ? 'fa-triangle-exclamation' :
+                  'fa-info-circle'
+                }`}></i>
+              </div>
+              <h3 className="text-white font-black text-lg mb-2">{customAlert.title}</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{customAlert.message}</p>
+              <button 
+                onClick={() => setCustomAlert(null)}
+                className="mt-8 w-full py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold text-sm transition-all active:scale-95 border border-slate-700"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal de Escolha após Upload */}
@@ -474,7 +516,10 @@ const App: React.FC = () => {
                 </button>
               )}
               <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => { navigator.clipboard.writeText(selectedResult.content); alert("Copiado!"); }} className="py-5 bg-slate-800 rounded-[2rem] font-bold text-sm text-white flex items-center justify-center gap-3 active:scale-95 transition-all">
+                <button onClick={() => { 
+                  navigator.clipboard.writeText(selectedResult.content); 
+                  showAlert("Copiado", "O conteúdo foi enviado para sua área de transferência.", "success");
+                }} className="py-5 bg-slate-800 rounded-[2rem] font-bold text-sm text-white flex items-center justify-center gap-3 active:scale-95 transition-all">
                   <i className="fas fa-copy opacity-40"></i> Copiar
                 </button>
                 {selectedResult.type === 'url' ? (
