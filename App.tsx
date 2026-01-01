@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [permission, setPermission] = useState<PermissionStatus>('checking');
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
+  const [multiScanResults, setMultiScanResults] = useState<string[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -74,6 +75,7 @@ const App: React.FC = () => {
     };
 
     setHistory(prev => {
+      // Evita duplicatas imediatas
       if (prev.length > 0 && prev[0].content === content) return prev;
       return [result, ...prev];
     });
@@ -81,6 +83,7 @@ const App: React.FC = () => {
     setSelectedResult(result);
     setAiAnalysis(null);
     setIsTorchOn(false);
+    setMultiScanResults(null);
     
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     setTimeout(() => setIsCooldown(false), 2000);
@@ -102,14 +105,45 @@ const App: React.FC = () => {
         canvas.height = img.height;
         context.drawImage(img, 0, 0);
         
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        const results: string[] = [];
+        let searching = true;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Limite para evitar loops infinitos
 
-        if (code) {
-          handleScan(code.data);
+        while (searching && attempts < MAX_ATTEMPTS) {
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+          if (code) {
+            results.push(code.data);
+            
+            // Mascara a área encontrada para buscar o próximo QR Code na mesma imagem
+            const { topLeft, topRight, bottomRight, bottomLeft } = code.location;
+            context.fillStyle = 'black';
+            context.beginPath();
+            context.moveTo(topLeft.x, topLeft.y);
+            context.lineTo(topRight.x, topRight.y);
+            context.lineTo(bottomRight.x, bottomRight.y);
+            context.lineTo(bottomLeft.x, bottomLeft.y);
+            context.closePath();
+            context.fill();
+            
+            attempts++;
+          } else {
+            searching = false;
+          }
+        }
+
+        if (results.length === 1) {
+          handleScan(results[0]);
+        } else if (results.length > 1) {
+          // Remove duplicatas detectadas por erros de precisão no mascaramento
+          const uniqueResults = Array.from(new Set(results));
+          setMultiScanResults(uniqueResults);
         } else {
           alert("Nenhum QR Code encontrado nesta imagem.");
         }
+        
         if (fileInputRef.current) fileInputRef.current.value = '';
       };
       img.src = e.target?.result as string;
@@ -187,15 +221,14 @@ const App: React.FC = () => {
                   <>
                     <QRScanner 
                       onScan={handleScan} 
-                      isActive={activeTab === AppTab.SCANNER && !selectedResult}
+                      isActive={activeTab === AppTab.SCANNER && !selectedResult && !multiScanResults}
                       isTorchOn={isTorchOn}
                       onTorchSupportChange={setIsTorchSupported}
                       onError={(err) => err.name === 'NotAllowedError' && setPermission('denied')}
                     />
                     
-                    {/* Controles Flutuantes do Scanner */}
                     <div className="absolute top-8 right-4 flex flex-col gap-3 z-20">
-                      {isTorchSupported && !selectedResult && (
+                      {isTorchSupported && !selectedResult && !multiScanResults && (
                         <button 
                           onClick={() => setIsTorchOn(!isTorchOn)}
                           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isTorchOn ? 'bg-emerald-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-slate-800/80 text-slate-400 backdrop-blur-md'}`}
@@ -251,6 +284,7 @@ const App: React.FC = () => {
           onClick={() => {
             setActiveTab(AppTab.SCANNER);
             setIsTorchOn(false);
+            setMultiScanResults(null);
           }}
           className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.SCANNER ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
         >
@@ -261,6 +295,7 @@ const App: React.FC = () => {
           onClick={() => {
             setActiveTab(AppTab.HISTORY);
             setIsTorchOn(false);
+            setMultiScanResults(null);
           }}
           className={`flex-1 h-12 rounded-full flex items-center justify-center gap-2 transition-all ${activeTab === AppTab.HISTORY ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-500'}`}
         >
@@ -268,6 +303,61 @@ const App: React.FC = () => {
           <span className="text-[10px] uppercase tracking-widest">Logs</span>
         </button>
       </div>
+
+      {/* Multi-result Selection Modal */}
+      {multiScanResults && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-slate-900 w-full rounded-t-[3rem] border-t border-slate-800 shadow-2xl animate-in slide-in-from-bottom-full duration-500 max-w-md">
+            <div className="p-8 pt-6 pb-12">
+              <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mb-8"></div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-xl font-black text-white">Múltiplos Códigos</h2>
+                  <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-bold">Escolha um para analisar</p>
+                </div>
+                <button onClick={() => setMultiScanResults(null)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2 mb-8">
+                {multiScanResults.map((content, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleScan(content)}
+                    className="w-full bg-slate-950 p-5 rounded-[2rem] border border-slate-800 hover:border-emerald-500/50 text-left transition-all active:scale-98 group flex items-center gap-4"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center shrink-0">
+                      <i className={`fas ${detectType(content) === 'url' ? 'fa-link text-emerald-500' : 'fa-font text-slate-400'}`}></i>
+                    </div>
+                    <p className="text-slate-300 font-medium truncate flex-1">{content}</p>
+                    <i className="fas fa-arrow-right text-slate-700 group-hover:text-emerald-500 transition-colors"></i>
+                  </button>
+                ))}
+              </div>
+
+              <button 
+                onClick={() => {
+                  multiScanResults.forEach(content => {
+                    const res: ScanResult = {
+                      id: Math.random().toString(36).substr(2, 9),
+                      content,
+                      timestamp: Date.now(),
+                      type: detectType(content)
+                    };
+                    setHistory(prev => [res, ...prev]);
+                  });
+                  setMultiScanResults(null);
+                  setActiveTab(AppTab.HISTORY);
+                }}
+                className="w-full py-5 bg-emerald-600 rounded-[2rem] font-black text-sm text-white uppercase tracking-widest shadow-xl shadow-emerald-900/20 active:scale-95 transition-all"
+              >
+                Salvar todos no histórico
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Result Modal UI */}
       {selectedResult && (
