@@ -42,6 +42,10 @@ const App: React.FC = () => {
   const [customAlert, setCustomAlert] = useState<CustomAlert | null>(null);
   const [isDecodingFile, setIsDecodingFile] = useState(false);
   const [decodingProgress, setDecodingProgress] = useState(0);
+
+  // PWA Install Prompt
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,7 +55,29 @@ const App: React.FC = () => {
       try { setHistory(JSON.parse(saved)); } catch (e) { console.error(e); }
     }
     checkInitialPermission();
+
+    // Ouvinte para instalação do PWA
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    });
+
+    window.addEventListener('appinstalled', () => {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    });
   }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   const checkInitialPermission = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -118,7 +144,6 @@ const App: React.FC = () => {
     setIsDecodingFile(true);
     setDecodingProgress(0);
     
-    // Simular progresso de leitura de arquivo
     const progressInt = setInterval(() => {
       setDecodingProgress(prev => Math.min(prev + 15, 90));
     }, 100);
@@ -198,7 +223,6 @@ const App: React.FC = () => {
     }
   };
 
-  // UI para quando a permissão da câmera é negada
   const renderPermissionDenied = () => (
     <div className="w-full aspect-square rounded-[3rem] bg-slate-900 border-4 border-slate-800 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
       <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 relative">
@@ -234,12 +258,10 @@ const App: React.FC = () => {
         <ImageCropper imageSrc={imageToCrop} onConfirm={processImageForQR} onCancel={() => setImageToCrop(null)} />
       )}
 
-      {/* Carregamento de Decodificação de Arquivo */}
       {isDecodingFile && (
         <div className="fixed top-0 left-0 right-0 z-[250] bg-emerald-500 h-1 transition-all duration-300" style={{ width: `${decodingProgress}%` }}></div>
       )}
 
-      {/* Alerta Personalizado */}
       {customAlert && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="w-full max-w-[320px] bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl p-8 flex flex-col items-center text-center">
@@ -253,7 +275,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Escolha após Upload */}
       {pendingImage && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="w-full max-w-sm bg-slate-900 rounded-[2.5rem] border border-slate-800 p-8 text-center animate-in zoom-in-95 duration-500">
@@ -315,7 +336,26 @@ const App: React.FC = () => {
             </div>
           </div>
         ) : (
-          <ScanHistory history={history} onClear={() => setHistory([])} onSelect={setSelectedResult} />
+          <div className="space-y-6">
+            {isInstallable && (
+              <button 
+                onClick={handleInstallClick}
+                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 p-4 rounded-2xl flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top-4 duration-500"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <i className="fas fa-mobile-screen-button text-white"></i>
+                  </div>
+                  <div className="text-left">
+                    <div className="text-white font-bold text-sm">Instalar App</div>
+                    <div className="text-white/70 text-[10px] font-medium">Acesse direto da tela inicial</div>
+                  </div>
+                </div>
+                <i className="fas fa-download text-white/50 text-sm"></i>
+              </button>
+            )}
+            <ScanHistory history={history} onClear={() => setHistory([])} onSelect={setSelectedResult} />
+          </div>
         )}
       </main>
 
@@ -344,7 +384,6 @@ const App: React.FC = () => {
                 <p className="text-slate-100 font-medium text-lg leading-relaxed break-all">{selectedResult.content}</p>
               </div>
 
-              {/* Área de Análise IA Integrada */}
               {isAnalyzing ? (
                 <div className="mb-8 p-6 rounded-[2.5rem] bg-emerald-500/5 border border-emerald-500/20">
                   <div className="flex justify-between items-center mb-4">

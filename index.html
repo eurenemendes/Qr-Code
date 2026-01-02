@@ -1,10 +1,15 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#020617">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>QR Master Pro - Scanner Inteligente</title>
+    
+    <link rel="manifest" href="/manifest.json">
     
     <!-- Favicon Profissional SVG (Codificado para evitar erro de build) -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%2310b981;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%23059669;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='10' y='10' width='80' height='80' rx='20' fill='url(%23g)'/%3E%3Crect x='25' y='25' width='50' height='50' rx='8' fill='white'/%3E%3Crect x='35' y='35' width='30' height='30' rx='4' fill='url(%23g)'/%3E%3C/svg%3E">
@@ -59,5 +64,14 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-emerald-500/30">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => console.log('SW registrado com sucesso'))
+            .catch(err => console.log('Erro ao registrar SW:', err));
+        });
+      }
+    </script>
 </body>
 </html>
