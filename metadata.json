@@ -1,6 +1,13 @@
 {
   "name": "QR Master Pro",
   "description": "Um leitor de QR Code moderno e ultrarrápido com histórico, análise por IA e design responsivo.",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='10' y='10' width='80' height='80' rx='20' fill='%2310b981'/><rect x='25' y='25' width='50' height='50' rx='8' fill='white'/><rect x='35' y='35' width='30' height='30' rx='4' fill='%2310b981'/></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
   "requestFramePermissions": [
     "camera"
   ]
